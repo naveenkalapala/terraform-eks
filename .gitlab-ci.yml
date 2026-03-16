@@ -9,12 +9,13 @@ variables:
   TF_CLI_ARGS_init: "-input=false"
 
   OPERATION:
-    value: "validate"
+    value: "plan"
+    description: "Select operation: validate, plan, apply, or destroy"
     options:
       - "validate"
       - "plan"
       - "apply"
-      - "destroy" 
+      - "destroy"
 
 .tf-init: &tf-init
   before_script:
