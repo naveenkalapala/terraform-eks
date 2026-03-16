@@ -1,0 +1,85 @@
+default:
+  image: 
+    name: hashicorp/terraform:1.3.7
+    entrypoint: [""]
+
+
+variables:
+  TF_IN_AUTOMATION: "true"
+  TF_CLI_ARGS_init: "-input=false"
+
+  OPERATION:
+    value: "validate"
+    options:
+      - "validate"
+      - "plan"
+      - "apply"
+      - "destroy" 
+
+.tf-init: &tf-init
+  before_script:
+    - terraform --version
+    - terraform init -input=false
+
+stages:
+  - terraform-validate
+  - terraform-plan
+  - terraform-apply
+  - terraform-destroy
+
+validate:
+  stage: terraform-validate
+  <<: *tf-init
+  script:
+    - terraform fmt -check -recursive
+    - terraform fmt
+    - terraform validate
+  rules:
+    - when: always
+
+terraform-plan:
+  stage: terraform-plan
+  <<: *tf-init
+  script:
+    - terraform plan -input=false -out=tfplan
+  artifacts:
+    name: "tfplan-${CI_COMMIT_SHORT_SHA}"
+    paths:
+      - tfplan
+    expire_in: 7 days
+  rules:
+    - if: '$OPERATION == "plan"'
+  needs:
+    - validate
+
+terraform-apply:
+  stage: terraform-apply
+  <<: *tf-init
+  script:
+    - terraform plan -input=false -out=tfplan
+    - terraform apply -input=false -auto-approve tfplan
+  rules:
+    - if: '$OPERATION == "apply"'
+      when: manual
+  needs:
+    - validate
+
+terraform-destroy:
+  stage: terraform-destroy
+  <<: *tf-init
+  script:
+    - terraform destroy -input=false -auto-approve
+  rules:
+    - if: '$OPERATION == "destroy"'
+      when: manual
+  needs:
+    - validate
+
+
+
+
+  
+
+
+
+
