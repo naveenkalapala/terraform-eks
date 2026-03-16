@@ -60,8 +60,7 @@ terraform-apply:
     - terraform plan -input=false -out=tfplan
     - terraform apply -input=false -auto-approve tfplan
   rules:
-    - if: '$OPERATION == "apply"'
-      when: manual
+    - when: manual
   needs:
     - terraform-plan
 
