@@ -1,82 +1,106 @@
 # Terraform EKS Cluster Deployment
 
-This project automates the deployment of a production-ready Amazon EKS (Elastic Kubernetes Service) cluster using Terraform and GitLab CI/CD.
+Automated deployment of an Amazon EKS cluster using Terraform modules and GitLab CI/CD.
 
-## Project Architecture
+## Architecture
 
-The infrastructure is organized into several modular components:
+```
+┌──────────────────────────────────────────────────┐
+│                    AWS Account                   │
+│                                                  │
+│  ┌──────────── VPC (10.0.0.0/16) ─────────────┐ │
+│  │                                             │ │
+│  │  ┌─────────────┐      ┌─────────────┐      │ │
+│  │  │  Subnet-1   │      │  Subnet-2   │      │ │
+│  │  │ us-east-1a  │      │ us-east-1b  │      │ │
+│  │  │ 10.0.1.0/24 │      │ 10.0.2.0/24 │      │ │
+│  │  └──────┬──────┘      └──────┬──────┘      │ │
+│  │         │                    │              │ │
+│  │         └────────┬───────────┘              │ │
+│  │                  │                          │ │
+│  │         ┌────────┴────────┐                 │ │
+│  │         │   EKS Cluster   │                 │ │
+│  │         │  (Control Plane)│                 │ │
+│  │         └────────┬────────┘                 │ │
+│  │                  │                          │ │
+│  │         ┌────────┴────────┐                 │ │
+│  │         │   Node Group    │                 │ │
+│  │         │  (Worker Nodes) │                 │ │
+│  │         │  t2.micro × 2   │                 │ │
+│  │         └─────────────────┘                 │ │
+│  │                                             │ │
+│  └─────────────────────────────────────────────┘ │
+│                                                  │
+│  IAM Roles: cluster-role, worker-node-role       │
+│  Security Groups: cluster-sg, worker-node-sg     │
+└──────────────────────────────────────────────────┘
+```
 
-- **VPC Module**: Sets up the network foundation, including VPC, subnets across multiple availability zones, and routing.
-- **IAM Module**: Manages the necessary IAM roles and policies for the EKS cluster and worker nodes.
-- **Security Module**: Configures security groups for the cluster and worker nodes to control traffic.
-- **EKS Module**: Provisions the core EKS cluster, specifying the Kubernetes version and network configuration.
-- **Nodegroup Module**: Deploys managed worker node groups with configurable instance types and scaling parameters.
+## Module Structure
+
+```
+terraform-eks/
+├── main.tf              # Wires all modules together
+├── variables.tf         # Input variables
+├── terraform.tfvars     # Variable values
+├── provider.tf          # AWS provider config
+├── .gitlab-ci.yml       # CI/CD pipeline
+└── modules/
+    ├── vpc/             # VPC, subnets, IGW, route tables
+    ├── iam/             # EKS cluster & node IAM roles
+    ├── security/        # Cluster & worker node security groups
+    ├── eks/             # EKS cluster control plane
+    └── nodegroup/       # Managed worker node group
+```
+
+### Module Dependency Flow
+
+```
+VPC ──┐
+IAM ──┼──→ EKS ──→ NodeGroup
+SG ───┘
+```
 
 ## Prerequisites
 
-- **Terraform**: version 1.3.7 or higher.
-- **AWS Credentials**: Configured with appropriate permissions to create EKS, VPC, and IAM resources.
-- **GitLab CI/CD**: Runner configured with Terraform image `hashicorp/terraform:1.3.7`.
+- Terraform >= 1.3.7
+- AWS credentials with EKS, VPC, and IAM permissions
+- GitLab runner (for CI/CD)
 
 ## Configuration
 
-The following variables are used to customize the deployment (see [variables.tf](file:///Users/nkalapala/Documents/Learnings/terraform-eks/variables.tf)):
-
-| Name | Description | Default |
-| :--- | :--- | :--- |
-| `region` | AWS region to deploy resources | `us-east-1` |
-| `cluster_name` | Name of the EKS cluster | - |
-| `kubernetes_version` | Kubernetes version for the cluster | - |
-| `vpc_cidr_block` | CIDR block for the VPC | - |
-| `subnet_cidr_blocks` | List of CIDR blocks for subnets | - |
-| `availability_zones` | List of AZs for subnets | - |
-| `instance_type` | EC2 instance type for worker nodes | - |
-| `desired_size` | Desired number of worker nodes | - |
-| `min_size` | Minimum number of worker nodes | - |
-| `max_size` | Maximum number of worker nodes | - |
-| `tag` | Tag prefix for resources | `nav-eks` |
+| Variable | Description | Default |
+|:---|:---|:---|
+| `region` | AWS region | `us-east-1` |
+| `cluster_name` | EKS cluster name | `nav-eks-demo` |
+| `kubernetes_version` | Kubernetes version | `1.32` |
+| `vpc_cidr_block` | VPC CIDR block | `10.0.0.0/16` |
+| `subnet_cidr_blocks` | Subnet CIDR blocks | `["10.0.1.0/24", "10.0.2.0/24"]` |
+| `availability_zones` | Availability zones | `["us-east-1a", "us-east-1b"]` |
+| `instance_type` | Worker node instance type | `t2.micro` |
+| `desired_size` | Desired worker nodes | `2` |
+| `min_size` | Minimum worker nodes | `1` |
+| `max_size` | Maximum worker nodes | `3` |
+| `tag` | Tag prefix for resources | `eks` |
 
 ## CI/CD Pipeline
 
-The project includes a robust GitLab CI/CD pipeline defined in [.gitlab-ci.yml](file:///Users/nkalapala/Documents/Learnings/terraform-eks/.gitlab-ci.yml).
+Defined in [.gitlab-ci.yml](.gitlab-ci.yml). Select the `OPERATION` variable when triggering a pipeline:
 
-### Stages
+| Operation | Stage | Trigger |
+|:---|:---|:---|
+| `validate` | terraform-validate | Automatic |
+| `plan` | terraform-plan | Automatic |
+| `apply` | terraform-apply | Manual click |
+| `destroy` | terraform-destroy | Manual click |
 
-1. **terraform-validate**: Runs `fmt` and `validate` on every commit.
-2. **terraform-plan**: Generates a Terraform execution plan (`tfplan`).
-3. **terraform-apply**: Manually triggered stage to apply the plan and deploy infrastructure.
-4. **terraform-destroy**: Manually triggered stages to plan and execute infrastructure destruction.
+## Local Usage
 
-### Operations
-
-The pipeline uses an `OPERATION` variable to control which actions are performed. You can set this variable when manually triggering a pipeline:
-- `validate` (default)
-- `plan`
-- `apply`
-- `destroy`
-
-## Usage (Local Development)
-
-To work on this project locally:
-
-1.  **Initialize Terraform**:
-    ```bash
-    terraform init
-    ```
-
-2.  **Plan changes**:
-    ```bash
-    terraform plan
-    ```
-
-3.  **Apply changes**:
-    ```bash
-    terraform apply
-    ```
-
-4.  **Destroy resources**:
-    ```bash
-    terraform destroy
-    ```
+```bash
+terraform init
+terraform plan
+terraform apply
+terraform destroy
+```
 
 
