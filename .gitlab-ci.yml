@@ -28,7 +28,7 @@ stages:
   - terraform-apply
   - terraform-destroy
 
-validate:
+terraform-validate:
   stage: terraform-validate
   <<: *tf-init
   script:
@@ -49,9 +49,9 @@ terraform-plan:
       - tfplan
     expire_in: 7 days
   rules:
-    - if: '$OPERATION == "plan"'
+    - when: always
   needs:
-    - validate
+    - terraform-validate
 
 terraform-apply:
   stage: terraform-apply
@@ -63,18 +63,30 @@ terraform-apply:
     - if: '$OPERATION == "apply"'
       when: manual
   needs:
-    - validate
+    - terraform-plan
+
+terraform-destroy-plan:
+  stage: terraform-destroy
+  <<: *tf-init
+  script:
+    - terraform plan -destroy -out=destroyplan
+  artifacts:
+    paths:
+      - destroyplan
+  rules:
+    - when: manual
+  needs:
+    - terraform-validate
 
 terraform-destroy:
   stage: terraform-destroy
   <<: *tf-init
   script:
-    - terraform destroy -input=false -auto-approve
+    - terraform apply -auto-approve destroyplan
   rules:
-    - if: '$OPERATION == "destroy"'
-      when: manual
+    - when: manual
   needs:
-    - validate
+    - terraform-destroy-plan
 
 
 
